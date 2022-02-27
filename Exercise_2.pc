@@ -1,0 +1,222 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <conio.h>
+#include <sqlca.h>
+#include <sqlcpr.h>
+
+EXEC SQL BEGIN DECLARE SECTION;
+  char g_userid[128] = "tsvetelin_istatkov/dbpass@83.228.124.173:6223/tsvetelin_istatkov";
+  char g_command[256] = {0};
+  int g_recordcount = 0;
+  int g_recordid = 0;
+  double g_recordamount = 0.0;
+  short g_recordAmountInd = -1;
+  char g_recordname[32] = {0};
+  short g_recordNameInd = -1;
+EXEC SQL END DECLARE SECTION;
+
+
+void sql_error(char *msg) {
+
+  char buf[BUFSIZ] = { 0 };
+
+  size_t buflen = 0; size_t msglen = 0;
+
+  EXEC SQL WHENEVER SQLERROR CONTINUE; 
+  EXEC SQL ROLLBACK WORK RELEASE; 
+
+  buflen = sizeof(buf);
+
+  /* Get oracle sql error into string */
+  sqlglm(buf, &buflen, &msglen);
+  
+  printf("%s: ", msg);
+  
+  buf[msglen] = 0;
+  
+  printf("%s\n", buf); 
+  
+  exit(1); 
+}
+
+/* commit transaction */
+void exec_commit() {
+
+  /* handle errors */ 
+  EXEC SQL WHENEVER SQLERROR do sql_error("Oracle error");
+
+  EXEC SQL COMMIT;
+
+  printf("\nCommit Executed.\n");
+}
+
+/* rollback transaction */
+void exec_rollback()
+{
+  EXEC SQL ROLLBACK WORK RELEASE;
+  printf("\nRollback Executed.\n");
+}
+
+
+void Get_UserInput(char *string, char *input_message)
+{
+  char input_buffer[256] = {0};
+  printf("%s\n", input_message);
+  scanf("%[^\n]%*c", string);
+}
+
+void Press_KeyToContinue()
+{
+  printf("\n\n\tPress any key to conitnue.\n\n");
+
+  char ch = getch();
+}
+
+/* Program that reads 2 string from console
+string1 - connection
+string2 - sql querry
+*/
+void Exercise_1()
+{
+  EXEC SQL WHENEVER SQLERROR do sql_error("Oracle error");
+
+  Get_UserInput(g_command, "Sql Querry");
+
+  EXEC SQL EXECUTE IMMEDIATE :g_command;
+
+  exec_commit();
+}
+
+/* Program thar shows how many records are in a table */
+void Exercise_2()
+{
+  EXEC SQL WHENEVER SQLERROR do sql_error("Oracle error");
+
+  EXEC SQL DECLARE my_cursor CURSOR FOR SELECT COUNT(*) FROM BATKA;
+
+  EXEC SQL OPEN my_cursor;
+
+  EXEC SQL FETCH my_cursor INTO :g_recordcount;
+  printf("Count(*): %d\n", g_recordcount);
+
+  EXEC SQL CLOSE my_cursor;
+
+  Exercise_1();
+
+  EXEC SQL SELECT COUNT(*) INTO :g_recordcount FROM batka;
+
+  printf("New Count: %d\n", g_recordcount);
+
+}
+
+void select_ex_table()
+{
+  EXEC SQL DECLARE my_cursor2 CURSOR FOR SELECT * FROM EX_TABLE;
+  EXEC SQL OPEN my_cursor2;
+  EXEC SQL WHENEVER NOT FOUND DO break; ///
+  for(;;)
+  {
+    EXEC SQL FETCH my_cursor2 INTO :g_recordid, :g_recordamount:g_recordAmountInd, :g_recordname:g_recordNameInd;
+
+    printf("Result: %d, %lf, %s\n",g_recordid, g_recordamount, g_recordname);
+  }
+  EXEC SQL WHENEVER NOT FOUND continue; ///
+  EXEC SQL CLOSE my_cursor2;  
+  printf("\nSelect from EX_TABLE.\n");
+  Press_KeyToContinue();
+}
+
+void count_ex_table()
+{
+  EXEC SQL SELECT COUNT(*) INTO :g_recordcount FROM EX_TABLE;
+  printf("Count(*): %d\n", g_recordcount);
+}
+
+void insert_null()
+{
+  g_recordid = 200;
+  g_recordamount = 0.22;
+  strcpy(g_recordname, "hello");
+
+  EXEC SQL INSERT INTO EX_TABLE 
+  VALUES (:g_recordid, :g_recordamount INDICATOR :g_recordAmountInd, :g_recordname INDICATOR :g_recordNameInd);
+}
+
+void select_null()
+{
+  EXEC SQL SELECT * INTO :g_recordid, :g_recordamount, :g_recordname
+  FROM EX_TABLE WHERE :g_recordname INDICATOR :g_recordNameInd IS NULL;
+
+  printf("%d %lf %s\n", g_recordid, g_recordamount, g_recordname);
+}
+
+/* Create, Insert, Select, Count, Update, Drop */
+void Exercise_3()
+{
+  EXEC SQL WHENEVER SQLERROR do sql_error("Oracle error");
+
+  // Create
+  EXEC SQL CREATE TABLE EX_TABLE(id int primary key, amount number, name varchar2(20));
+  printf("\nTable EX_TABLE created.\n");
+  Press_KeyToContinue();
+
+  // Insert
+  EXEC SQL INSERT INTO EX_TABLE VALUES (1,10,'hello');
+  EXEC SQL INSERT INTO EX_TABLE VALUES (2,20,'goodbye');
+  EXEC SQL INSERT INTO EX_TABLE VALUES (3,30,'morning');
+  insert_null();
+  exec_commit();
+  printf("\nInsert into EX_TABLE.\n");
+  Press_KeyToContinue();
+
+  // Select
+  select_ex_table();
+
+  // Delete
+  EXEC SQL DELETE EX_TABLE WHERE id = :g_recordid;
+  exec_commit();
+  printf("\nDeleted id %d from EX_TABLE.\n", g_recordid);
+
+  // Select 2
+  select_ex_table();
+
+  // Count
+  count_ex_table();
+
+  // Update
+  EXEC SQL UPDATE EX_TABLE 
+  SET id = 55 
+  WHERE id = 1;
+  printf("\nUpdated.\n");
+
+  // Select 3
+  select_ex_table();
+
+  // Drop
+  EXEC SQL DROP TABLE EX_TABLE;
+  printf("\nTable dropped.\n");
+
+
+
+}
+
+
+
+
+
+int main()
+{
+  EXEC SQL WHENEVER SQLERROR do sql_error("Oracle error");
+
+  EXEC SQL CONNECT :g_userid;
+  printf("Connected.\n");
+
+  // Exercise_1();
+  // Exercise_2();
+  Exercise_3();
+
+
+
+  return 0;
+}
